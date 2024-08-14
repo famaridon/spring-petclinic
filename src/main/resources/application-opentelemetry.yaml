@@ -1,0 +1,9 @@
+otel:
+  propagators:
+    - tracecontext
+  resource:
+    attributes:
+      deployment.environment: local
+      service:
+        name: petclinic
+        namespace: spring
