@@ -36,6 +36,9 @@ import org.springframework.web.servlet.ModelAndView;
 import jakarta.validation.Valid;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
+
 /**
  * @author Juergen Hoeller
  * @author Ken Krebs
@@ -49,8 +52,11 @@ class OwnerController {
 
 	private final OwnerRepository owners;
 
-	public OwnerController(OwnerRepository clinicService) {
+	private final ObservationRegistry observationRegistry;
+
+	public OwnerController(OwnerRepository clinicService, ObservationRegistry observationRegistry) {
 		this.owners = clinicService;
+		this.observationRegistry = observationRegistry;
 	}
 
 	@InitBinder
@@ -90,27 +96,27 @@ class OwnerController {
 	@GetMapping("/owners")
 	public String processFindForm(@RequestParam(defaultValue = "1") int page, Owner owner, BindingResult result,
 			Model model) {
+
 		// allow parameterless GET request for /owners to return all records
 		if (owner.getLastName() == null) {
 			owner.setLastName(""); // empty string signifies broadest possible search
 		}
 
-		// find owners by last name
-		Page<Owner> ownersResults = findPaginatedForOwnersLastName(page, owner.getLastName());
-		if (ownersResults.isEmpty()) {
-			// no owners found
-			result.rejectValue("lastName", "notFound", "not found");
-			return "owners/findOwners";
-		}
+		return Observation.createNotStarted("micrometer.find-owners", observationRegistry)
+			.highCardinalityKeyValue("lastname", owner.getLastName())
+			.observe(() -> {
+				// find owners by last name
+				Page<Owner> ownersResults = findPaginatedForOwnersLastName(page, owner.getLastName());
+				if (ownersResults.isEmpty()) {
+					// no owners found
+					result.rejectValue("lastName", "notFound", "not found");
+					return "owners/findOwners";
+				}
 
-		if (ownersResults.getTotalElements() == 1) {
-			// 1 owner found
-			owner = ownersResults.iterator().next();
-			return "redirect:/owners/" + owner.getId();
-		}
+				// multiple owners found
+				return addPaginationModel(page, model, ownersResults);
+			});
 
-		// multiple owners found
-		return addPaginationModel(page, model, ownersResults);
 	}
 
 	private String addPaginationModel(int page, Model model, Page<Owner> paginated) {
