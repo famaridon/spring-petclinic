@@ -7,3 +7,11 @@ otel:
       service:
         name: petclinic
         namespace: spring
+  instrumentation:
+    micrometer:
+      enabled: true
+      
+management:
+  tracing:
+    sampling:
+      probability: 1.0
